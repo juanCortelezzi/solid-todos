@@ -1,5 +1,6 @@
 // @refresh reload
 import { Suspense } from "solid-js";
+import "@total-typescript/ts-reset";
 import {
   Body,
   ErrorBoundary,

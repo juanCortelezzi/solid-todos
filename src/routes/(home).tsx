@@ -1,79 +1,24 @@
-import { Component, For, Show } from "solid-js";
-import { createStore } from "solid-js/store";
-import { CheckCircleIcon, MinusCircleIcon } from "~/components/Icons";
-
-class Identificator {
-  static counter = 0;
-  static createId() {
-    return this.counter++;
-  }
-}
-
-type Todo = {
-  id: number;
-  description: string;
-  dependsOn: number[];
-  done: boolean;
-};
-
-function newTodo({
-  description,
-  done,
-  dependsOn,
-}: {
-  description: string;
-  done?: boolean;
-  dependsOn?: number[];
-}): Todo {
-  return {
-    id: Identificator.createId(),
-    description,
-    done: done ?? false,
-    dependsOn: dependsOn ?? [],
-  };
-}
-
-function parseTodo(description: string) {
-  const trimmed = description.trim();
-  if (trimmed === "") return;
-  if (!trimmed.endsWith(")")) return newTodo({ description });
-  const start = trimmed.lastIndexOf("(", trimmed.length - 1);
-  if (start === -1) return newTodo({ description });
-  const dependsOn = trimmed
-    .slice(start + 1, trimmed.length - 1)
-    .split(",")
-    .map((s) => {
-      console.log(s);
-      if (!s.startsWith("#")) return false;
-      let parsed: number;
-      try {
-        parsed = parseInt(s.slice(1), 10);
-      } catch {
-        return false;
-      }
-      if (store.todos.length <= parsed) return false;
-      return parsed;
-    })
-    .filter(Boolean) as number[]; // TS is shit;
-
-  if (dependsOn.length === 0) return newTodo({ description });
-
-  return newTodo({ description: description.slice(0, start - 1), dependsOn });
-}
-
-const [store, setStore] = createStore<{
-  description: string;
-  todos: Todo[];
-}>({
-  description: "",
-  todos: [
-    newTodo({ description: "do the laundry", done: true }),
-    newTodo({ description: "make a todo app" }),
-    newTodo({ description: "show todo app to santi", dependsOn: [1] }),
-  ],
-});
+import { Component, createSignal, For, Show } from "solid-js";
+import {
+  CheckCircleIcon,
+  EllipsisCircleIcon,
+  PencilIcon,
+  TrashIcon,
+} from "~/components/Icons";
+import {
+  addTodo,
+  deleteTodo,
+  isMissingDependencies,
+  parseTodo,
+  Todo,
+  todos,
+  toggleTodo,
+  updateTodo,
+} from "~/signals/todos";
+import { createToggle } from "~/signals/toggle";
 
 export default function Home() {
+  const [description, setDescription] = createSignal("");
   return (
     <main class="mx-auto my-4 lg:container">
       <h1 class="text-center text-4xl font-bold text-blue-500">
@@ -86,30 +31,25 @@ export default function Home() {
           onSubmit={(e) => {
             e.preventDefault();
 
-            const description = store.description;
-            setStore("description", "");
+            const desc = description();
+            setDescription("");
 
-            if (description.trim() === "") return;
-
-            const todo = parseTodo(description);
-            if (!todo) return;
-
-            setStore("todos", (t) => [...t, todo]);
+            const todo = parseTodo(desc);
+            if (todo) addTodo(todo);
           }}
         >
-          <div>
-            <input
-              class="form-input w-full rounded border border-blue-500 p-2"
-              placeholder="description.."
-              onInput={(e) => setStore("description", e.currentTarget.value)}
-              value={store.description}
-            />
-            <button type="button">toggle clean mode</button>
-          </div>
+          <input
+            class="form-input w-full rounded border p-2"
+            placeholder="description.."
+            onInput={(e) => setDescription(e.currentTarget.value)}
+            value={description()}
+          />
         </form>
         <div class="my-4" />
-        <div class="w-full">
-          <For each={store.todos}>{(todo) => <TodoItem todo={todo} />}</For>
+        <div class="flex w-full flex-col gap-2">
+          <For each={todos} fallback="No todos, lets create some!">
+            {(todo) => <TodoItem todo={todo} />}
+          </For>
         </div>
       </div>
     </main>
@@ -117,45 +57,102 @@ export default function Home() {
 }
 
 const TodoItem: Component<{ todo: Todo }> = (props) => {
+  const editMode = createToggle(false);
+  const depString = (deps: Set<number>) =>
+    `(${[...deps.values()].map((n) => `#${n}`).join(", ")})`;
+
+  const [description, setDescription] = createSignal(
+    props.todo.dependsOn.size > 0
+      ? props.todo.description + " " + depString(props.todo.dependsOn)
+      : props.todo.description
+  );
+
   return (
-    <div class="my-2 flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() => {
-          if (!props.todo.done) {
-            for (const id of props.todo.dependsOn) {
-              if (!store.todos[id].done) return;
-            }
+    <div class="flex items-center justify-between rounded px-1 shadow">
+      <div class="my-2 flex items-center gap-2">
+        <button
+          type="button"
+          disabled={
+            (isMissingDependencies(props.todo) && !props.todo.done) ||
+            editMode.isOn()
           }
-          setStore("todos", props.todo.id, (t) => ({
-            ...t,
-            done: !t.done,
-          }));
-        }}
-      >
-        {props.todo.done ? (
-          <CheckCircleIcon class="h-6 w-6 text-blue-500" />
-        ) : (
-          <MinusCircleIcon class="h-6 w-6" />
-        )}
-      </button>
-      <p
-        classList={{
-          "opacity-70": props.todo.done,
-        }}
-      >
-        #{props.todo.id}
-      </p>
-      <p
-        classList={{
-          "line-through opacity-70": props.todo.done,
-        }}
-      >
-        {props.todo.description}
-      </p>
-      <Show when={props.todo.dependsOn.length > 0}>
-        <p>| ({props.todo.dependsOn.map((n) => `#${n}`).join(", ")})</p>
-      </Show>
+          class="disabled:pointer-events-none disabled:cursor-pointer disabled:opacity-50"
+          onClick={() => toggleTodo(props.todo.id)}
+        >
+          <Show
+            when={props.todo.done}
+            fallback={<EllipsisCircleIcon class="h-6 w-6" />}
+          >
+            <CheckCircleIcon class="h-6 w-6 text-blue-500" />
+          </Show>
+        </button>
+        <p classList={{ "opacity-70": props.todo.done && !editMode.isOn() }}>
+          #{props.todo.id}
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+
+            const desc = description();
+
+            const todo = parseTodo(desc, true);
+            if (!todo) return;
+
+            setDescription(
+              todo.dependsOn.size > 0
+                ? todo.description + " " + depString(todo.dependsOn)
+                : todo.description
+            );
+
+            updateTodo(props.todo.id, todo);
+            editMode.turnOff();
+          }}
+        >
+          <Show
+            when={!editMode.isOn()}
+            fallback={
+              <input
+                onInput={(e) => setDescription(e.currentTarget.value)}
+                value={description()}
+                class="border-b border-slate-400"
+              />
+            }
+          >
+            <p
+              class="truncate"
+              classList={{ "line-through opacity-70": props.todo.done }}
+            >
+              {props.todo.description}
+            </p>
+          </Show>
+        </form>
+      </div>
+      <div class="flex items-center justify-center gap-1">
+        <Show when={props.todo.dependsOn.size > 0}>
+          <p>
+            ({[...props.todo.dependsOn.values()].map((n) => `#${n}`).join(", ")}
+            )
+          </p>
+        </Show>
+        <button
+          onClick={editMode.toggle}
+          class="rounded p-2"
+          classList={{
+            "bg-blue-300": editMode.isOn(),
+            "hover:text-blue-500": !editMode.isOn(),
+          }}
+        >
+          <PencilIcon class="h-5 w-5" />
+        </button>
+        <button
+          onClick={() => deleteTodo(props.todo.id)}
+          class="rounded p-2 disabled:pointer-events-none disabled:cursor-pointer disabled:opacity-50"
+          classList={{ "hover:bg-red-300": !editMode.isOn() }}
+          disabled={editMode.isOn()}
+        >
+          <TrashIcon class="h-5 w-5" />
+        </button>
+      </div>
     </div>
   );
 };
