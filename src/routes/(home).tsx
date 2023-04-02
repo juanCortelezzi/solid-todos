@@ -1,24 +1,38 @@
-import { Component, createSignal, For, Show } from "solid-js";
+import { Component, createEffect, createSignal, For, Show } from "solid-js";
+import { useRouteData } from "solid-start";
+import { createServerAction$, createServerData$ } from "solid-start/server";
 import {
   CheckCircleIcon,
   EllipsisCircleIcon,
+  PaperPlaneIcon,
   PencilIcon,
   TrashIcon,
 } from "~/components/Icons";
 import {
-  addTodo,
-  deleteTodo,
-  isMissingDependencies,
-  parseTodo,
-  Todo,
-  todos,
-  toggleTodo,
-  updateTodo,
-} from "~/signals/todos";
+  deleteTodoFn,
+  getTodosFn,
+  postTodoFn,
+  TodoInput,
+  TodoReturn,
+  toggleTodoFn,
+  updateTodoFn,
+} from "~/db";
+import { parseTodo } from "~/signals/todos";
 import { createToggle } from "~/signals/toggle";
+
+export const routeData = () => {
+  return createServerData$(getTodosFn, { initialValue: [] });
+};
 
 export default function Home() {
   const [description, setDescription] = createSignal("");
+  const todos = useRouteData<typeof routeData>();
+  const [posting, postMutation] = createServerAction$(async (todo: TodoInput) =>
+    postTodoFn(todo)
+  );
+
+  createEffect(() => console.log(todos()));
+
   return (
     <main class="mx-auto my-4 lg:container">
       <h1 class="text-center text-4xl font-bold text-blue-500">
@@ -27,7 +41,7 @@ export default function Home() {
       <div class="my-4" />
       <div class="mx-auto flex max-w-xl flex-col items-center justify-center">
         <form
-          class="w-full"
+          class="flex w-full gap-1"
           onSubmit={(e) => {
             e.preventDefault();
 
@@ -35,7 +49,8 @@ export default function Home() {
             setDescription("");
 
             const todo = parseTodo(desc);
-            if (todo) addTodo(todo);
+            console.log("this is the todo:", todo);
+            if (todo) postMutation(todo);
           }}
         >
           <input
@@ -44,10 +59,16 @@ export default function Home() {
             onInput={(e) => setDescription(e.currentTarget.value)}
             value={description()}
           />
+          <button class="form-input rounded border p-2 text-blue-500 hover:bg-blue-300 hover:text-inherit">
+            <PaperPlaneIcon
+              class="h-6 w-6"
+              classList={{ "animate-spin": posting.pending }}
+            />
+          </button>
         </form>
         <div class="my-4" />
         <div class="flex w-full flex-col gap-2">
-          <For each={todos} fallback="No todos, lets create some!">
+          <For each={todos()} fallback="No todos, lets create some!">
             {(todo) => <TodoItem todo={todo} />}
           </For>
         </div>
@@ -56,15 +77,31 @@ export default function Home() {
   );
 }
 
-const TodoItem: Component<{ todo: Todo }> = (props) => {
+const depString = (deps: Array<number>) =>
+  `(${deps.map((n) => `#${n}`).join(", ")})`;
+
+const TodoItem: Component<{ todo: TodoReturn }> = (props) => {
   const editMode = createToggle(false);
-  const depString = (deps: Set<number>) =>
-    `(${[...deps.values()].map((n) => `#${n}`).join(", ")})`;
 
   const [description, setDescription] = createSignal(
-    props.todo.dependsOn.size > 0
-      ? props.todo.description + " " + depString(props.todo.dependsOn)
+    props.todo.dependsOn.length > 0
+      ? props.todo.description +
+          " " +
+          depString([...props.todo.dependsOn.values()])
       : props.todo.description
+  );
+
+  const [_deleting, deleteMutation] = createServerAction$(async (id: number) =>
+    deleteTodoFn(id)
+  );
+
+  const [_updating, updateMutation] = createServerAction$(
+    async ({ id, todo }: { id: number; todo: TodoInput }) =>
+      updateTodoFn(id, todo)
+  );
+
+  const [_toggling, toggleMutation] = createServerAction$(async (id: number) =>
+    toggleTodoFn(id)
   );
 
   return (
@@ -73,11 +110,10 @@ const TodoItem: Component<{ todo: Todo }> = (props) => {
         <button
           type="button"
           disabled={
-            (isMissingDependencies(props.todo) && !props.todo.done) ||
-            editMode.isOn()
+            (props.todo.isMissingDeps && !props.todo.done) || editMode.isOn()
           }
           class="disabled:pointer-events-none disabled:cursor-pointer disabled:opacity-50"
-          onClick={() => toggleTodo(props.todo.id)}
+          onClick={() => toggleMutation(props.todo.id)}
         >
           <Show
             when={props.todo.done}
@@ -95,16 +131,16 @@ const TodoItem: Component<{ todo: Todo }> = (props) => {
 
             const desc = description();
 
-            const todo = parseTodo(desc, true);
+            const todo = parseTodo(desc);
             if (!todo) return;
 
             setDescription(
-              todo.dependsOn.size > 0
+              todo.dependsOn.length > 0
                 ? todo.description + " " + depString(todo.dependsOn)
                 : todo.description
             );
 
-            updateTodo(props.todo.id, todo);
+            updateMutation({ id: props.todo.id, todo });
             editMode.turnOff();
           }}
         >
@@ -128,7 +164,7 @@ const TodoItem: Component<{ todo: Todo }> = (props) => {
         </form>
       </div>
       <div class="flex items-center justify-center gap-1">
-        <Show when={props.todo.dependsOn.size > 0}>
+        <Show when={props.todo.dependsOn.length > 0}>
           <p>
             ({[...props.todo.dependsOn.values()].map((n) => `#${n}`).join(", ")}
             )
@@ -145,7 +181,7 @@ const TodoItem: Component<{ todo: Todo }> = (props) => {
           <PencilIcon class="h-5 w-5" />
         </button>
         <button
-          onClick={() => deleteTodo(props.todo.id)}
+          onClick={() => deleteMutation(props.todo.id)}
           class="rounded p-2 disabled:pointer-events-none disabled:cursor-pointer disabled:opacity-50"
           classList={{ "hover:bg-red-300": !editMode.isOn() }}
           disabled={editMode.isOn()}
