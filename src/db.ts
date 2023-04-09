@@ -1,12 +1,16 @@
 import { z } from "zod";
 
-class Identifier {
-  static counter = 1;
-  static createId() {
+class Counter {
+  private defaultValue = 1;
+  private counter = this.defaultValue;
+  get() {
     return this.counter++;
   }
-  static reset() {
-    this.counter = 1;
+  remove() {
+    this.counter--;
+  }
+  reset() {
+    this.counter = this.defaultValue;
   }
 }
 
@@ -25,6 +29,7 @@ export type TodoReturn = {
   isMissingDeps: boolean;
 };
 
+const todoCounter = new Counter();
 const todos = new Map<number, Todo>();
 
 export type TodoInput = z.input<typeof todoInputSchema>;
@@ -62,7 +67,7 @@ export function postTodoFn(rawTodo: z.input<typeof todoInputSchema>) {
   }
 
   const todo = todoResult.data;
-  const id = Identifier.createId();
+  const id = todoCounter.get();
   todos.set(id, {
     id,
     description: todo.description,
@@ -82,10 +87,14 @@ export function updateTodoFn(
 
   const updatedTodo = updatedTodoResult.data;
 
+  const dependencies = updatedTodo.dependsOn.filter(
+    (otherId) => todos.has(otherId) && otherId !== id
+  );
+
   todos.set(id, {
     id,
     description: updatedTodo.description,
-    dependsOn: new Set(updatedTodo.dependsOn.filter((id) => todos.has(id))),
+    dependsOn: new Set(dependencies),
     done: updatedTodo.done,
   });
 }
@@ -104,6 +113,7 @@ function isMissingDepsFn(deps: Set<number>) {
 
 export function deleteTodoFn(id: number) {
   if (!todos.delete(id)) return;
+  todoCounter.remove();
   for (const todo of todos.values()) {
     todo.dependsOn.delete(id);
   }
