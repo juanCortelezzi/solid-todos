@@ -17,7 +17,7 @@ import {
   toggleTodoFn,
   updateTodoFn,
 } from "~/db";
-import { parseTodo } from "~/signals/todos";
+import { stringToTodo } from "~/signals/todos";
 import { createToggle } from "~/signals/toggle";
 
 export const routeData = () => {
@@ -48,7 +48,7 @@ export default function Home() {
             const desc = description();
             setDescription("");
 
-            const todo = parseTodo(desc);
+            const todo = stringToTodo(desc);
             console.log("this is the todo:", todo);
             if (todo) postMutation(todo);
           }}
@@ -131,7 +131,7 @@ const TodoItem: Component<{ todo: TodoReturn }> = (props) => {
 
             const desc = description();
 
-            const todo = parseTodo(desc);
+            const todo = stringToTodo(desc);
             if (!todo) return;
 
             setDescription(

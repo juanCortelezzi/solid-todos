@@ -14,7 +14,7 @@ export const newTodo = ({
   dependsOn: dependsOn ?? [],
 });
 
-export function parseTodo(description: string) {
+export function stringToTodo(description: string) {
   const trimmed = description.trim();
   if (trimmed === "") return;
   if (!trimmed.endsWith(")")) return newTodo({ description });
