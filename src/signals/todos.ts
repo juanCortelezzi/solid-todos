@@ -18,7 +18,7 @@ export function parseTodo(description: string) {
   const trimmed = description.trim();
   if (trimmed === "") return;
   if (!trimmed.endsWith(")")) return newTodo({ description });
-  const start = trimmed.lastIndexOf("(", trimmed.length - 1);
+  const start = trimmed.lastIndexOf("(", trimmed.length - 2);
   if (start === -1) return newTodo({ description });
   const dependsOn = trimmed
     .slice(start + 1, trimmed.length - 1)
