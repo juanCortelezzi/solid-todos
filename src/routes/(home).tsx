@@ -31,8 +31,6 @@ export default function Home() {
     postTodoFn(todo)
   );
 
-  createEffect(() => console.log(todos()));
-
   return (
     <main class="mx-auto my-4 lg:container">
       <h1 class="text-center text-4xl font-bold text-blue-500">
@@ -49,7 +47,6 @@ export default function Home() {
             setDescription("");
 
             const todo = stringToTodo(desc);
-            console.log("this is the todo:", todo);
             if (todo) postMutation(todo);
           }}
         >
