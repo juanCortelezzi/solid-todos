@@ -87,14 +87,16 @@ export function updateTodoFn(
 
   const updatedTodo = updatedTodoResult.data;
 
-  const dependencies = updatedTodo.dependsOn.filter(
-    (otherId) => todos.has(otherId) && otherId !== id
+  const dependencies = new Set(
+    updatedTodo.dependsOn.filter(
+      (otherId) => todos.has(otherId) && otherId !== id
+    )
   );
 
   todos.set(id, {
     id,
     description: updatedTodo.description,
-    dependsOn: new Set(dependencies),
+    dependsOn: dependencies,
     done: updatedTodo.done,
   });
 }
