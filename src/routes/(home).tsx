@@ -74,7 +74,7 @@ export default function Home() {
   );
 }
 
-const depString = (deps: Array<number>) =>
+const depsToString = (deps: Array<number>) =>
   `(${deps.map((n) => `#${n}`).join(", ")})`;
 
 const TodoItem: Component<{ todo: TodoReturn }> = (props) => {
@@ -84,7 +84,7 @@ const TodoItem: Component<{ todo: TodoReturn }> = (props) => {
     props.todo.dependsOn.length > 0
       ? props.todo.description +
           " " +
-          depString([...props.todo.dependsOn.values()])
+          depsToString([...props.todo.dependsOn.values()])
       : props.todo.description
   );
 
@@ -133,7 +133,7 @@ const TodoItem: Component<{ todo: TodoReturn }> = (props) => {
 
             setDescription(
               todo.dependsOn.length > 0
-                ? todo.description + " " + depString(todo.dependsOn)
+                ? todo.description + " " + depsToString(todo.dependsOn)
                 : todo.description
             );
 
